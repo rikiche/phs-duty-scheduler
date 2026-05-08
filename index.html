@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>PHS当番担当表</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Meiryo','Yu Gothic',sans-serif;background:#f5f5f5;color:#333;padding:16px}
+.app{max-width:900px;margin:0 auto;background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+h1{font-size:18px;font-weight:500;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="app">
+<h1>PHS当番 担当表</h1>
+<div id="root"></div>
+</div>
+<script>
+(function(){
+
+var DAYS=["日","月","火","水","木","金","土"];
+var COLS=["#185FA5","#0F6E56","#993C1D","#993556","#3B6D11","#854F0B","#534AB7","#A32D2D"];
+var HOL=new Set(["2024-01-01","2024-01-08","2024-02-11","2024-02-12","2024-02-23","2024-03-20","2024-04-29","2024-05-03","2024-05-04","2024-05-05","2024-05-06","2024-07-15","2024-08-11","2024-08-12","2024-09-16","2024-09-22","2024-09-23","2024-10-14","2024-11-03","2024-11-04","2024-11-23","2025-01-01","2025-01-13","2025-02-11","2025-02-23","2025-02-24","2025-03-20","2025-04-29","2025-05-03","2025-05-04","2025-05-05","2025-05-06","2025-07-21","2025-08-11","2025-09-15","2025-09-22","2025-09-23","2025-10-13","2025-11-03","2025-11-23","2025-11-24","2026-01-01","2026-01-12","2026-02-11","2026-02-23","2026-03-20","2026-04-29","2026-05-03","2026-05-04","2026-05-05","2026-05-06","2026-07-20","2026-08-11","2026-09-21","2026-09-22","2026-09-23","2026-10-12","2026-11-03","2026-11-23"]);
+
+function dkey(y,m,d){return y+"-"+String(m+1).padStart(2,"0")+"-"+String(d).padStart(2,"0");}
+function isH(y,m,d){return HOL.has(dkey(y,m,d));}
+function ini(n){var p=n.trim().split(/\s+/);return p.length>=2?p[0][0]+p[1][0]:n.slice(0,2);}
+function sho(n){var p=n.trim().split(/\s+/);return p[p.length-1]||n;}
+function gm(name){return state.members.find(function(m){return m.name===name;});}
+
+var state={
+  members:JSON.parse(localStorage.getItem("phs_v6_m")||"[]"),
+  ngMap:JSON.parse(localStorage.getItem("phs_v6_ng")||"{}"),
+  schedMap:JSON.parse(localStorage.getItem("phs_v6_sc")||"{}"),
+  selMbr:null,
+  tab:"members",
+  ngY:new Date().getFullYear(),ngM:new Date().getMonth(),
+  scY:new Date().getFullYear(),scM:new Date().getMonth()
+};
+
+function save(){
+  localStorage.setItem("phs_v6_m",JSON.stringify(state.members));
+  localStorage.setItem("phs_v6_ng",JSON.stringify(state.ngMap));
+  localStorage.setItem("phs_v6_sc",JSON.stringify(state.schedMap));
+}
+
+var alertTimer=null;
+function showAlert(msg,type){
+  var el=document.getElementById("r-alert");
+  if(!el)return;
+  el.innerHTML='<div style="padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;background:'+(type==="ok"?"#DCFCE7":"#FEF9C3")+';color:'+(type==="ok"?"#166534":"#854D0E")+';border:1px solid '+(type==="ok"?"#86EFAC":"#FDE047")+'">'+msg+'</div>';
+  if(alertTimer)clearTimeout(alertTimer);
+  alertTimer=setTimeout(function(){el.innerHTML="";},3000);
+}
+
+function render(){
+  var t=state.tab;
+  var html="";
+  html+='<div style="display:flex;gap:4px;margin-bottom:1.5rem;border-bottom:1px solid #e5e5e5">';
+  ["members","ng","schedule"].forEach(function(id,i){
+    var label=["メンバー管理","NG日設定","担当表作成"][i];
+    var active=t===id;
+    html+='<button id="tab-'+id+'" style="padding:8px 16px;font-size:14px;cursor:pointer;border:none;background:transparent;color:'+(active?"#333":"#888")+';border-bottom:'+(active?"2px solid #333":"2px solid transparent")+';margin-bottom:-1px;font-weight:'+(active?"500":"400")+'">'+label+'</button>';
+  });
+  html+='</div>';
+
+  if(t==="members"){
+    html+='<div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:16px 20px;margin-bottom:16px">';
+    html+='<p style="font-size:12px;font-weight:500;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">メンバー一覧</p>';
+    if(!state.members.length){
+      html+='<p style="font-size:13px;color:#aaa;padding:8px 0">メンバーがいません</p>';
+    } else {
+      state.members.forEach(function(m,i){
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0">';
+        html+='<div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:500;flex-shrink:0;background:'+COLS[i%COLS.length]+'20;color:'+COLS[i%COLS.length]+'">'+ini(m.name)+'</div>';
+        html+='<span style="flex:1;font-size:14px">'+m.name+'</span>';
+        html+='<span style="font-size:13px;color:#888;min-width:80px;text-align:right;padding-right:8px">'+(m.phs||"—")+'</span>';
+        html+='<button id="rm-'+i+'" style="background:none;border:none;cursor:pointer;color:#aaa;font-size:14px;padding:2px 6px">✕</button>';
+        html+='</div>';
+      });
+    }
+    html+='<div style="display:flex;gap:8px;margin-top:8px;align-items:center">';
+    html+='<input id="iname" type="text" placeholder="氏名を入力..." style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px"/>';
+    html+='<input id="iphs" type="text" placeholder="PHS番号" style="flex:0 0 120px;padding:8px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px"/>';
+    html+='<button id="addbtn" style="padding:8px 16px;border:1px solid #333;border-radius:8px;background:#333;color:#fff;cursor:pointer;font-size:13px">追加</button>';
+    html+='</div></div>';
+    html+='<p style="font-size:13px;color:#888">氏名とPHS番号を登録したら「NG日設定」タブへ進んでください。</p>';
+  }
+
+  if(t==="ng"){
+    html+='<div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:16px 20px;margin-bottom:16px">';
+    html+='<p style="font-size:12px;font-weight:500;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">メンバーを選択</p>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
+    state.members.forEach(function(m){
+      var on=state.selMbr===m.name;
+      html+='<div id="chip-'+m.name+'" style="padding:5px 12px;border-radius:20px;border:1px solid '+(on?"#333":"#ccc")+';font-size:13px;cursor:pointer;background:'+(on?"#333":"#f5f5f5")+';color:'+(on?"#fff":"#333")+'">'+m.name+'</div>';
+    });
+    html+='</div></div>';
+    html+='<div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:16px 20px;margin-bottom:16px">';
+    html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">';
+    html+='<button id="ng-prev" style="padding:8px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">←</button>';
+    html+='<span style="font-size:16px;font-weight:500;min-width:120px;text-align:center">'+state.ngY+"年"+(state.ngM+1)+"月</span>";
+    html+='<button id="ng-next" style="padding:8px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">→</button>';
+    html+='</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    DAYS.forEach(function(d){html+='<div style="background:#f5f5f5;font-size:11px;font-weight:500;color:#888;min-height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center">'+d+'</div>';});
+    var first=new Date(state.ngY,state.ngM,1).getDay();
+    var days=new Date(state.ngY,state.ngM+1,0).getDate();
+    for(var i=0;i<first;i++)html+='<div></div>';
+    for(var d=1;d<=days;d++){
+      var dow=(first+d-1)%7;
+      var k=dkey(state.ngY,state.ngM,d);
+      var isNg=state.selMbr&&state.ngMap[state.selMbr]&&state.ngMap[state.selMbr].includes(k);
+      var h=isH(state.ngY,state.ngM,d);
+      var col=h||dow===0?"#DC2626":dow===6?"#1D4ED8":"#333";
+      var bg=isNg?"#FEE2E2":"#fff";
+      var bc=isNg?"#FECACA":"#eee";
+      html+='<div id="ngd-'+k+'" style="min-height:40px;border-radius:8px;border:1px solid '+bc+';background:'+bg+';cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:4px">';
+      html+='<span style="font-size:12px;color:'+col+'">'+d+'</span>';
+      if(isNg)html+='<span style="font-size:10px;color:#991B1B">✕</span>';
+      html+='</div>';
+    }
+    html+='</div>';
+    html+='<p style="font-size:13px;color:#888;margin-top:8px">日付をクリックしてNG日（✕）を設定。もう一度クリックで解除。</p>';
+    html+='</div>';
+  }
+
+  if(t==="schedule"){
+    var sk=state.scY+"-"+state.scM;
+    var sched=state.schedMap[sk]||{};
+    html+='<div style="background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:16px 20px;margin-bottom:16px">';
+    html+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem">';
+    html+='<button id="sc-prev" style="padding:8px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">←</button>';
+    html+='<span style="font-size:16px;font-weight:500;min-width:120px;text-align:center">'+state.scY+"年"+(state.scM+1)+"月</span>";
+    html+='<button id="sc-next" style="padding:8px 16px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer;font-size:13px">→</button>';
+    html+='</div>';
+    html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+    html+='<button id="genbtn" style="padding:8px 16px;border:1px solid #333;border-radius:8px;background:#333;color:#fff;cursor:pointer;font-size:13px">担当表を自動作成</button>';
+    if(Object.keys(sched).length)html+='<button id="expbtn" style="padding:8px 16px;border:1px solid #166534;border-radius:8px;background:#166534;color:#fff;cursor:pointer;font-size:13px">Excelに出力 ↓</button>';
+    html+='</div>';
+    html+='<div id="r-alert"></div>';
+    html+='<div style="display:flex;gap:12px;margin-bottom:10px;font-size:12px;color:#888;flex-wrap:wrap;align-items:center">';
+    html+='<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#DC2626;display:inline-block"></span>日曜・祝日</span>';
+    html+='<span style="display:flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:#1D4ED8;display:inline-block"></span>土曜</span>';
+    html+='</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">';
+    DAYS.forEach(function(d){html+='<div style="background:#f5f5f5;font-size:11px;font-weight:500;color:#888;min-height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center">'+d+'</div>';});
+    var first=new Date(state.scY,state.scM,1).getDay();
+    var days=new Date(state.scY,state.scM+1,0).getDate();
+    for(var i=0;i<first;i++)html+='<div></div>';
+    for(var d=1;d<=days;d++){
+      var dow=(first+d-1)%7;
+      var h=isH(state.scY,state.scM,d);
+      var isSun=h||dow===0;var isSat=!isSun&&dow===6;
+      var numCol=isSun?"#DC2626":isSat?"#1D4ED8":"#333";
+      var nameCol=isSun?"#DC2626":isSat?"#1D4ED8":"#333";
+      var a=sched[d];var mbr=a?gm(a):null;
+      html+='<div style="min-height:62px;border-radius:8px;border:1px solid #eee;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:4px 2px;background:#fff">';
+      html+='<span style="font-size:12px;color:'+numCol+'">'+d+'</span>';
+      if(mbr){
+        html+='<span style="font-size:12px;font-weight:500;text-align:center;line-height:1.2;color:'+nameCol+'">'+sho(mbr.name)+'</span>';
+        if(mbr.phs)html+='<span style="font-size:10px;color:#888;text-align:center">'+mbr.phs+'</span>';
+      }
+      html+='</div>';
+    }
+    html+='</div></div>';
+    if(Object.keys(sched).length){
+      var counts={};state.members.forEach(function(m){counts[m.name]=0;});
+      Object.values(sched).forEach(function(n){if(n)counts[n]++;});
+      html+='<p style="font-size:12px;font-weight:500;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">担当日数</p>';
+      html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px">';
+      state.members.forEach(function(m){
+        html+='<div style="background:#f5f5f5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:12px;color:#888;margin-bottom:4px">'+sho(m.name)+'</div><div style="font-size:22px;font-weight:500">'+counts[m.name]+'</div></div>';
+      });
+      html+='</div>';
+    }
+  }
+
+  document.getElementById("root").innerHTML=html;
+  bindEvents();
+}
+
+function bindEvents(){
+  var t=state.tab;
+  ["members","ng","schedule"].forEach(function(id){
+    var el=document.getElementById("tab-"+id);
+    if(el)el.addEventListener("click",function(){state.tab=id;render();});
+  });
+  if(t==="members"){
+    var addbtn=document.getElementById("addbtn");
+    if(addbtn)addbtn.addEventListener("click",addMember);
+    var iname=document.getElementById("iname");
+    if(iname)iname.addEventListener("keydown",function(e){if(e.key==="Enter")document.getElementById("iphs").focus();});
+    var iphs=document.getElementById("iphs");
+    if(iphs)iphs.addEventListener("keydown",function(e){if(e.key==="Enter")addMember();});
+    state.members.forEach(function(m,i){
+      var btn=document.getElementById("rm-"+i);
+      if(btn)btn.addEventListener("click",function(){removeMember(i);});
+    });
+  }
+  if(t==="ng"){
+    state.members.forEach(function(m){
+      var chip=document.getElementById("chip-"+m.name);
+      if(chip)chip.addEventListener("click",function(){state.selMbr=m.name;render();});
+    });
+    var ngprev=document.getElementById("ng-prev");
+    if(ngprev)ngprev.addEventListener("click",function(){state.ngM--;if(state.ngM<0){state.ngM=11;state.ngY--;}render();});
+    var ngnext=document.getElementById("ng-next");
+    if(ngnext)ngnext.addEventListener("click",function(){state.ngM++;if(state.ngM>11){state.ngM=0;state.ngY++;}render();});
+    var first=new Date(state.ngY,state.ngM,1).getDay();
+    var days=new Date(state.ngY,state.ngM+1,0).getDate();
+    for(var d=1;d<=days;d++){
+      (function(key){
+        var el=document.getElementById("ngd-"+key);
+        if(el)el.addEventListener("click",function(){toggleNg(key);});
+      })(dkey(state.ngY,state.ngM,d));
+    }
+  }
+  if(t==="schedule"){
+    var scprev=document.getElementById("sc-prev");
+    if(scprev)scprev.addEventListener("click",function(){state.scM--;if(state.scM<0){state.scM=11;state.scY--;}render();});
+    var scnext=document.getElementById("sc-next");
+    if(scnext)scnext.addEventListener("click",function(){state.scM++;if(state.scM>11){state.scM=0;state.scY++;}render();});
+    var genbtn=document.getElementById("genbtn");
+    if(genbtn)genbtn.addEventListener("click",generate);
+    var expbtn=document.getElementById("expbtn");
+    if(expbtn)expbtn.addEventListener("click",exportExcel);
+  }
+}
+
+function addMember(){
+  var name=document.getElementById("iname").value.trim();
+  var phs=document.getElementById("iphs").value.trim();
+  if(!name)return;
+  state.members.push({name:name,phs:phs});
+  save();render();
+}
+function removeMember(i){
+  var name=state.members[i].name;
+  state.members.splice(i,1);
+  delete state.ngMap[name];
+  save();render();
+}
+function toggleNg(k){
+  if(!state.selMbr)return;
+  if(!state.ngMap[state.selMbr])state.ngMap[state.selMbr]=[];
+  var arr=state.ngMap[state.selMbr];
+  var idx=arr.indexOf(k);
+  if(idx>=0)arr.splice(idx,1);else arr.push(k);
+  save();render();
+}
+function generate(){
+  if(!state.members.length){showAlert("メンバーを先に登録してください","wn");return;}
+  var days=new Date(state.scY,state.scM+1,0).getDate();
+  var k=state.scY+"-"+state.scM;
+  var result={};var counts={};
+  state.members.forEach(function(m){counts[m.name]=0;});
+  var prev=null;
+  for(var d=1;d<=days;d++){
+    var dk2=dkey(state.scY,state.scM,d);
+    var ng=state.members.filter(function(m){return state.ngMap[m.name]&&state.ngMap[m.name].includes(dk2);}).map(function(m){return m.name;});
+    var avail=state.members.filter(function(m){return m.name!==prev&&!ng.includes(m.name);});
+    if(!avail.length)avail=state.members.filter(function(m){return !ng.includes(m.name);});
+    if(!avail.length){result[d]=null;continue;}
+    avail.sort(function(a,b){return counts[a.name]-counts[b.name];});
+    result[d]=avail[0].name;counts[avail[0].name]++;prev=avail[0].name;
+  }
+  state.schedMap[k]=result;
+  save();render();
+  showAlert("担当表を作成しました！","ok");
+}
+function exportExcel(){
+  if(typeof XLSX==="undefined"){showAlert("ライブラリ読み込み中...","wn");return;}
+  var k=state.scY+"-"+state.scM;var sched=state.schedMap[k];
+  if(!sched){showAlert("先に担当表を作成してください","wn");return;}
+  var days=new Date(state.scY,state.scM+1,0).getDate();
+  var first=new Date(state.scY,state.scM,1).getDay();
+  var wb=XLSX.utils.book_new();
+  var rows=[["日","月","火","水","木","金","土"]];
+  var week=Array(7).fill("");var dn=1;
+  for(var i=0;i<first;i++)week[i]="";
+  for(var p=first;p<7&&dn<=days;p++){var m=sched[dn]?gm(sched[dn]):null;week[p]=dn+"\n"+(m?m.name:"---")+(m&&m.phs?"\n"+m.phs:"");dn++;}
+  rows.push(week.slice());
+  while(dn<=days){
+    week=Array(7).fill("");
+    for(var p2=0;p2<7&&dn<=days;p2++){var m2=sched[dn]?gm(sched[dn]):null;week[p2]=dn+"\n"+(m2?m2.name:"---")+(m2&&m2.phs?"\n"+m2.phs:"");dn++;}
+    rows.push(week.slice());
+  }
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=Array(7).fill({wch:13});
+  ws["!rows"]=[{hpt:18}].concat(Array(rows.length-1).fill({hpt:52}));
+  var range=XLSX.utils.decode_range(ws["!ref"]||"A1");
+  for(var R=range.s.r;R<=range.e.r;R++){for(var C=0;C<7;C++){var addr=XLSX.utils.encode_cell({r:R,c:C});if(!ws[addr])ws[addr]={t:"s",v:""};ws[addr].s={alignment:{wrapText:true,vertical:"top",horizontal:"left"}};}}
+  XLSX.utils.book_append_sheet(wb,ws,state.scY+"年"+(state.scM+1)+"月 担当表");
+  XLSX.writeFile(wb,"PHS担当表_"+state.scY+"年"+(state.scM+1)+"月.xlsx");
+  showAlert("Excelファイルをダウンロードしました","ok");
+}
+
+render();
+
+})();
+</script>
+</body>
+</html>
