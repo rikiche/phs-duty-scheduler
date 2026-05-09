@@ -1,14 +1,13 @@
-# phs-duty-scheduler
-医療現場におけるPHS当番表の作成を自動化するWebアプリ。複雑な勤務条件（NG日・連勤防止・公平性）をロジック化し、作成時間を大幅に削減。
-# PHS当番担当表（phs-duty-scheduler）
+# phs-duty-scheduler（PHS当番表自動作成ツール）
 
 ## 概要
-医療現場におけるPHS当番表の作成を自動化し、業務効率を改善するためのWebアプリケーションです。
+病院事務として毎月手作業でで作成していた担当表において、
+ミスや長時間かかっていたため、自動化ツールを作成した。
 
 ## 解決したい課題
 - 手作業による作成時間の増大
 - 複雑な勤務条件（NG日、連勤、公平性）の管理ミス
 
 ## 技術スタック
-- HTML / CSS / JavaScript (Vanilla JS)
+- HTML / CSS / JavaScript
 - SheetJS (Excel出力用ライブラリ)
